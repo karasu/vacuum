@@ -1,0 +1,103 @@
+<head>
+<title>ROOMBA-ESP8266</title>
+<style>
+div,fieldset,input,select{
+  padding:5px;
+  font-size:1em;
+}
+
+input{
+  width:100%;
+  box-sizing:border-box;
+  -webkit-box-sizing:border-box;
+  -moz-box-sizing:border-box;
+}
+
+select{
+  width:100%;
+}
+
+textarea{
+  resize:none;
+  width:98%;
+  height:318px;
+  padding:5px;
+  overflow:auto;
+}
+
+body{
+  text-align:center;
+  font-family:verdana;
+}
+
+td{
+  padding:0px;
+}
+
+button{
+  border:0;
+  border-radius:0.3rem;
+  background-color:#1fa3ec;
+  color:#fff;
+  line-height:2.4rem;
+  font-size:1.2rem;
+  width:100%;
+  -webkit-transition-duration:0.4s;
+  transition-duration:0.4s;
+  cursor:pointer;
+}
+
+button:hover{
+  background-color:#0e70a4;
+}
+
+.bred{
+  background-color:#d43535;
+}
+
+.bred:hover{
+  background-color:#931f1f;
+}
+
+.bgrn{
+  background-color:#47c266;
+}
+    
+.bgrn:hover{
+  background-color:#5aaf6f;
+}
+
+a{
+  text-decoration:none;
+}
+
+.p{
+  float:left;
+  text-align:left;
+}
+
+.q{
+  float:right;
+  text-align:right;
+}
+</style>
+</head>
+<body>
+  <div style='text-align:left;display:inline-block;min-width:340px;'>
+    <h1>Roomba Vacuum (esp8266)</h1>
+    <form action='wi' method='get'><button>Configure WiFi</button></form><br>
+    <form action='/' method='post'><button>Turn On</button><input name='CM' type='hidden' value='turn_on'></form><br>
+    <form action='/' method='post'><button>Turn Off</button><input name='CM' type='hidden' value='turn_off'></form><br>
+    <form action='/' method='post'><button>Pause / Continue</button><input name='CM' type='hidden' value='start_pause'></form><br>
+    <form action='/' method='post'><button>Stop</button><input name='CM' type='hidden' value='stop'></form><br>
+    <form action='/' method='post'><button>Clean Spot</button><input name='CM' type='hidden' value='clean_spot'></form><br>
+    <form action='/' method='post'><button>Locate</button><input name='CM' type='hidden' value='locate'></form><br>
+    <form action='/' method='post'><button>Return to Base</button><input name='CM' type='hidden' value='return_to_base'></form><br>
+    <div style='text-align:right;font-size:11px;'>
+      <hr/>
+      <a href='http://" HOSTNAME ".local' target='_blank' style='color:#aaa;'>Roomba Vacuum (esp8266) v0.1 by karasu</a>
+    </div>
+  </div>
+</body>
+</html>
+

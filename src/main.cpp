@@ -17,6 +17,7 @@
 
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
 
 #include <DNSServer.h>
 #include <ESP8266mDNS.h>
@@ -34,12 +35,14 @@
 #include "config.h"
 
 WiFiClient wifiClient;
+ESP8266WiFiMulti wifiMulti;
 
 bool OTAStarted = false;
 
-// roomba timers
+// Timers
 int lastStateMsgTime = 0;
 int lastWakeupTime = 0;
+int lastRestartTime = 0;
 
 PubSubClient mqttClient(wifiClient);
 const char *commandTopic PROGMEM = MQTT_COMMAND_TOPIC;
@@ -68,7 +71,7 @@ RemoteDebug Debug;
 // web server -------------------------------------------------------------------------------------
 
 // Create a webserver object that listens for HTTP request on port 80
-ESP8266WebServer WebServer(80);
+ESP8266WebServer webServer(80);
 
 // function prototypes for HTTP handlers
 void handleRoot();
@@ -197,17 +200,20 @@ void sleepIfNecessary() {
 
 void wifiSetup()
 {
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+    // Add Wi-Fi networks you want to connect to
+    wifiMulti.addAP(WIFI_SSID, WIFI_PASSWORD);
+    wifiMulti.addAP(WIFI_SSID_2, WIFI_PASSWORD_2);   
 
-    while (WiFi.waitForConnectResult() != WL_CONNECTED) {
-        Serial.println("Connection Failed! Rebooting...");
+    // Wait for the Wi-Fi to connect: scan for Wi-Fi networks, and connect to the strongest of the networks above
+    Serial.print("Connecting Wifi...");
+    while (wifiMulti.run() != WL_CONNECTED) {
         delay(1000);
-        ESP.restart();
+        Serial.print(".");
     }
 
     Serial.println("");
     Serial.print("Connected to ");
-    Serial.println(WIFI_SSID);
+    Serial.println(WiFi.SSID());
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
 
@@ -228,14 +234,50 @@ void wifiSetup()
 void onOTAStart() {
     roomba->pause();
     OTAStarted = true;
+    Serial.println("OTA started!");
+}
+
+void onOTAEnd() {
+    Serial.println("OTA ended!");
+}
+
+void onOTAProgress(unsigned int progress, unsigned int total) {
+    Serial.printf("Progress: %u%%\r", progress / (total / 100));
+}
+
+void onOTAError(ota_error_t error) {
+    Serial.printf("Error[%u]: ", error);
+
+    if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+    else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+    else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+    else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+    else if (error == OTA_END_ERROR) Serial.println("End Failed");
 }
 
 void OTASetup()
 {
     ArduinoOTA.setHostname(HOSTNAME);
     ArduinoOTA.setPassword(OTA_PASSWORD);
-    ArduinoOTA.begin();
+    
     ArduinoOTA.onStart(onOTAStart);
+    ArduinoOTA.onEnd(onOTAEnd);
+    ArduinoOTA.onProgress(onOTAProgress);
+    ArduinoOTA.onError(onOTAError);
+    
+    ArduinoOTA.begin();
+    Serial.println("OTA ready.");
+}
+
+void webserverSetup()
+{
+    // Start web server
+    // Call the 'handleRoot' function when a client requests URI "/"
+    webServer.on("/", handleRoot);
+    // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
+    webServer.onNotFound(handleNotFound);
+    // Actually start the server
+    webServer.begin();
 }
 
 // Main program (setup and main loop) -------------------------------------------------------------
@@ -274,19 +316,12 @@ void setup() {
 
     mqttSetup();
 
-    // Start web server
-    // Call the 'handleRoot' function when a client requests URI "/"
-    WebServer.on("/", handleRoot);
-    // When a client requests an unknown URI (i.e. something other than "/"), call function "handleNotFound"
-    WebServer.onNotFound(handleNotFound);
-    // Actually start the server
-    WebServer.begin();
+    webserverSetup();
 }
 
-void loop() {
-
-    // Important callbacks that _must_ happen every cycle
-    // ArduinoOTA.handle();
+void loop()
+{
+    ArduinoOTA.handle();
     
     Debug.handle();
 
@@ -300,14 +335,14 @@ void loop() {
 
     long now = millis();
 
-    // If MQTT is not connected to the broker and enough time has passed, try to reconnect
+    // If MQTT is not connected to the broker and enough time has passed (5s), try to reconnect
     if (!mqttClient.connected() && (now - lastConnectTime) > 5000) {
         LOG("MQTT not connected. Reconnecting...\n");
         lastConnectTime = now;
         mqttReconnect();
     }
 
-    // Wakeup the roomba at fixed intervals
+    // Wakeup the roomba at fixed intervals (50s)
     if (now - lastWakeupTime > 50000) {
         lastWakeupTime = now;
         if (!roomba->isCleaning()) {
@@ -322,7 +357,7 @@ void loop() {
         }
     }
 
-    // Report the status over mqtt at fixed intervals
+    // Report the status over mqtt at fixed intervals (10s)
     if (now - lastStateMsgTime > 10000) {
         lastStateMsgTime = now;
         if (now - roomba->getTimestamp() > 30000 || roomba->isSent()) {
@@ -336,19 +371,26 @@ void loop() {
         sleepIfNecessary();
     }
 
+    // Restart esp (4min) for sanity
+    if (now - lastRestartTime > 240000) {
+        lastRestartTime = now;
+        // TODO: send mqtt a restart message information
+        ESP.restart();
+    }
+
     roomba->readSensorPacket();
 
     mqttClient.loop();
 
     // Listen for HTTP requests from clients
-    WebServer.handleClient(); 
+    webServer.handleClient(); 
 }
 
 // See https://tttapa.github.io/ESP8266/Chap10%20-%20Simple%20Web%20Server.html
 
 static void WebGetArg(const char* arg, char* out, size_t max)
 {
-  String s = WebServer.arg(arg);
+  String s = webServer.arg(arg);
   strlcpy(out, s.c_str(), max);
 }
 
@@ -363,32 +405,33 @@ void handleRoot() {
     ".bgrn:hover{background-color:#5aaf6f;}a{text-decoration:none;}.p{float:left;text-align:left;}.q{float:right;text-align:right;}</style>"
     "</head>"
     "<body>"
-    "<div style='text-align:left;display:inline-block;min-width:340px;'><div style='text-align:center;'>"
-    "<h1>" D_PROGRAMNAME "</h1>"
-    "<form action='wi' method='get'><button>Configure WiFi</button></form><br>"
-    "<form action='/' method='post'><button>Turn On</button><input name='CM' type='hidden' value='turn_on'></form><br>"
-    "<form action='/' method='post'><button>Turn Off</button><input name='CM' type='hidden' value='turn_off'></form><br>"
-    "<form action='/' method='post'><button>Pause / Continue</button><input name='CM' type='hidden' value='start_pause'></form><br>"
-    "<form action='/' method='post'><button>Stop</button><input name='CM' type='hidden' value='stop'></form><br>"
-    "<form action='/' method='post'><button>Clean Spot</button><input name='CM' type='hidden' value='clean_spot'></form><br>"
-    "<form action='/' method='post'><button>Locate</button><input name='CM' type='hidden' value='locate'></form><br>"
-    "<form action='/' method='post'><button>Return to Base</button><input name='CM' type='hidden' value='return_to_base'></form><br>"
-    "<div style='text-align:right;font-size:11px;'><hr/><a href='http://" HOSTNAME ".local' target='_blank' style='color:#aaa;'>" D_PROGRAMNAME " by " D_AUTHOR "</a></div>"
+    "<div style='text-align:left;display:inline-block;min-width:340px;'>"
+      "<h1>" D_PROGRAMNAME "</h1>"
+      "<form action='wi' method='get'><button>Configure WiFi</button></form><br>"
+      "<form action='/' method='post'><button>Turn On</button><input name='CM' type='hidden' value='turn_on'></form><br>"
+      "<form action='/' method='post'><button>Turn Off</button><input name='CM' type='hidden' value='turn_off'></form><br>"
+      "<form action='/' method='post'><button>Pause / Continue</button><input name='CM' type='hidden' value='start_pause'></form><br>"
+      "<form action='/' method='post'><button>Stop</button><input name='CM' type='hidden' value='stop'></form><br>"
+      "<form action='/' method='post'><button>Clean Spot</button><input name='CM' type='hidden' value='clean_spot'></form><br>"
+      "<form action='/' method='post'><button>Locate</button><input name='CM' type='hidden' value='locate'></form><br>"
+      "<form action='/' method='post'><button>Return to Base</button><input name='CM' type='hidden' value='return_to_base'></form><br>"
+      "<div style='text-align:right;font-size:11px;'><hr/>"
+        "<a href='http://" HOSTNAME ".local' target='_blank' style='color:#aaa;'>" D_PROGRAMNAME " v" VERSION " by " D_AUTHOR "</a>"
+      "</div>"
     "</div>"
-    "</div></div>"
     "</body>"
     "</html>";
 
-    if (WebServer.hasArg("CM")) {
+    if (webServer.hasArg("CM")) {
         char cmd[100];
         WebGetArg("CM", cmd, sizeof(cmd));
         roomba->performMQTTCommand(cmd);
     }
 
-    WebServer.send(200, "text/html", s);
+    webServer.send(200, "text/html", s);
 }
 
 void handleNotFound(){
     // Send HTTP status 404 (Not Found) when there's no handler for the URI in the request
-    WebServer.send(404, "text/html", "<h1>I find your lack of faith disturbing...</h1>");
+    webServer.send(404, "text/html", "<h1>I find your lack of faith disturbing...</h1>");
 }
