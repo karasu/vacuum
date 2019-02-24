@@ -4,9 +4,9 @@
 #define ROOMBA_650_SLEEP_FIX
 
 #define D_PROGRAMNAME "roomba-esp8266"
-#define D_AUTHOR "Gustau Castells"
+#define D_AUTHOR "karasu"
 #define HOSTNAME "roomba"
-#define WIFI_SSID "Unitat-Popular-3"
+#define WIFI_SSID "Unitat-Popular"
 #define WIFI_PASSWORD ""
 #define OTA_PASSWORD ""
 
