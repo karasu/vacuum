@@ -132,21 +132,21 @@ void mqttSendStatus() {
         roomba->roombaState.charge,
         roomba->roombaState.capacity);
 
-    StaticJsonBuffer<200> jsonBuffer;
-    JsonObject& root = jsonBuffer.createObject();
+    StaticJsonDocument<200> doc;
+
     if (roomba->roombaState.capacity != 0) {
-        root["battery_level"] = (roomba->roombaState.charge * 100) / roomba->roombaState.capacity;
+        doc["battery_level"] = (roomba->roombaState.charge * 100) / roomba->roombaState.capacity;
     }
-    root["cleaning"] = roomba->roombaState.cleaning;
-    root["docked"] = roomba->roombaState.docked;
-    root["charging"] = roomba->roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
+    doc["cleaning"] = roomba->roombaState.cleaning;
+    doc["docked"] = roomba->roombaState.docked;
+    doc["charging"] = roomba->roombaState.chargingState == Roomba::ChargeStateReconditioningCharging
         || roomba->roombaState.chargingState == Roomba::ChargeStateFullCharging
         || roomba->roombaState.chargingState == Roomba::ChargeStateTrickleCharging;
-    root["voltage"] = roomba->roombaState.voltage;
-    root["current"] = roomba->roombaState.current;
-    root["charge"] = roomba->roombaState.charge;
+    doc["voltage"] = roomba->roombaState.voltage;
+    doc["current"] = roomba->roombaState.current;
+    doc["charge"] = roomba->roombaState.charge;
     String jsonStr;
-    root.printTo(jsonStr);
+    serializeJson(doc, jsonStr);
     mqttClient.publish(statusTopic, jsonStr.c_str());
 }
 
