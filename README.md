@@ -2,6 +2,9 @@
 Control Roomba vacuum cleaner with an ESP8266
 
 Based on code from [johnboiles/esp-roomba-mqtt](https://github.com/johnboiles/esp-roomba-mqtt)
+
+Please, this is not finished, use johnboiles code instead.
+
 ```
 765
 4 3
